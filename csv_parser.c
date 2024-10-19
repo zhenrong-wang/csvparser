@@ -110,7 +110,7 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
     return -1;
 }
 
-#define TEST_ROUNDS         100
+#define TEST_ROUNDS         50
 #define MATCHED_LIST_MAX    65536
 
 #define ERR_FILE_OPEN       -1
