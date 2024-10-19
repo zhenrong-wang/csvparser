@@ -3,15 +3,15 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
-#ifdef _WIN32
-#include <Windows.h>
-#include <Memoryapi.h>
 
+#ifdef _WIN32
+    #include <Windows.h>
+    #include <Memoryapi.h>
 #else 
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <sys/stat.h>
+    #include <sys/mman.h>
 #endif
 
 /* KMP algorithm preprocessor: create NEXT array. */
