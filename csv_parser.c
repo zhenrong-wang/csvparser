@@ -3,10 +3,16 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <Windows.h>
+#include <Memoryapi.h>
+
+#else 
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#endif
 
 /* KMP algorithm preprocessor: create NEXT array. */
 size_t *kmp_create_next_array(char* string) {
@@ -122,11 +128,13 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
  */
 int csv_parser(const char *data_file, char *search_kwd, char **matched_list, const size_t matched_list_max) {
     int ret_flag = 0;
+#ifndef _WIN32
     int fd = open(data_file, O_RDONLY);
     if(fd == -1) {
         ret_flag = ERR_FILE_OPEN;
         goto clean_and_return;
-    }  
+    }
+#endif
     if(search_kwd == NULL || matched_list == NULL) {
         ret_flag = ERR_NULL_PTR;
         goto clean_and_return;
@@ -137,19 +145,47 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
         goto clean_and_return;
     }
     size_t matched_line_num = 0, kwd_len = strlen(search_kwd);
+ #ifndef _WIN32
     struct stat file_stat;
     if(fstat(fd, &file_stat) == -1) {
         ret_flag = ERR_FILE_STAT;
         goto clean_and_return;
     }
+    size_t file_size = file_stat.st_size;
     char *map_head = mmap(NULL, file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0); 
     if(map_head == MAP_FAILED) {
         ret_flag = ERR_MAP_FAILED;
         goto clean_and_return;
     }
+#else
+    HANDLE h_file = CreateFile(data_file, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if(h_file == INVALID_HANDLE_VALUE) {
+        ret_flag = ERR_FILE_OPEN;
+        goto clean_and_return;
+    }
+    LARGE_INTEGER file_size_x;
+    if(GetFileSizeEx(h_file, &file_size_x)==0) {
+        ret_flag = ERR_FILE_STAT;
+        goto clean_and_return;
+    }
+    size_t file_size = file_size_x.QuadPart;
+    //printf("%lu\n", file_size);
+    HANDLE h_file_mapping = CreateFileMapping(h_file, NULL, PAGE_READONLY, 0, 0, NULL);
+    if(h_file_mapping == INVALID_HANDLE_VALUE) {
+        ret_flag = ERR_MAP_FAILED;
+        goto clean_and_return;
+    }
+    LPVOID lp_base = MapViewOfFile(h_file_mapping, FILE_MAP_READ | FILE_MAP_COPY, 0, 0, file_size);
+    if(lp_base == NULL) {
+        ret_flag = ERR_MAP_FAILED;
+        goto clean_and_return;
+    }
+    //printf("%lu\n", file_size);
+    char *map_head = (char *)lp_base;
+#endif
     char *p_tmp = map_head;
     size_t idx_tmp = 0, line_len;
-    for(size_t pos = 0; pos < file_stat.st_size; pos++) {
+    for(size_t pos = 0; pos < file_size; pos++) {
         if(map_head[pos] == '\n') {
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
             line_len = pos - idx_tmp;
@@ -171,12 +207,21 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
             idx_tmp = pos + 1;
         }
     }
-    if(munmap(map_head, file_stat.st_size) == -1) 
+#ifdef _WIN32
+    if(!UnmapViewOfFile(lp_base) || !CloseHandle(h_file_mapping))
         ret_flag = ERR_UNMAP_FAILED;
+#else
+    if(munmap(map_head, file_size) == -1) 
+        ret_flag = ERR_UNMAP_FAILED;
+#endif
         
 clean_and_return:
     if(ret_flag != ERR_FILE_OPEN)
+#ifdef _WIN32
+        CloseHandle(h_file);
+#else
         close(fd);
+#endif
     if(ret_flag != ERR_FILE_OPEN && ret_flag != ERR_NULL_PTR && ret_flag != ERR_MEM_ALLOC)
         free(next_array);
     return (ret_flag) ? ret_flag : matched_line_num;

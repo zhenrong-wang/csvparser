@@ -22,7 +22,7 @@ You need a C compiler to build.
 
 - For GNU/Linux Distro or other *nix users, the [GNU Compiler Collections](https://gcc.gnu.org/), known as gcc, is recommended.
 - For macOS users, [clang](https://clang.llvm.org/) is easy to install and use (brew is not needed to install clang on macOS).
-- Currently this code doesn't work on Windows because it used Linux mmap() API. 
+- For Microsoft Windows users, [mingw-w64](https://sourceforge.net/projects/mingw-w64/) is required.
 
 ### 3.1.2 Build Guide
 
