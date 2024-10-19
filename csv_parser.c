@@ -190,12 +190,13 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
             line_len = pos - idx_tmp;
             if(kmp_search_ultra(p_tmp, line_len, search_kwd, kwd_len, next_array) >= 0) {
-                char *line_tmp = (char *)calloc(line_len + 1, sizeof(char));
+                char *line_tmp = (char *)malloc((line_len + 1) * sizeof(char));
                 if(line_tmp == NULL) {
                     ret_flag = ERR_ALLOC_IN_LOOP;
                     break;
                 }
-                memcpy(line_tmp, p_tmp, line_len);
+                memcpy(line_tmp, p_tmp, line_len); 
+                line_tmp[line_len] = '\0';
                 matched_list[matched_line_num] = line_tmp;
                 matched_line_num++;
                 if(matched_line_num == matched_list_max) {
