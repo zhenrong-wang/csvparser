@@ -19,7 +19,7 @@ size_t *kmp_create_next_array(char* string) {
     size_t i = 0, j = 1, length = 0;
     if (string == NULL || (length = strlen(string)) < 1) 
         return NULL;
-    size_t* next_array = (size_t*)calloc(length, sizeof(size_t));
+    size_t *next_array = (size_t *)calloc(length, sizeof(size_t));
     if (next_array == NULL) 
         return NULL;
     while (j < length) {
@@ -29,6 +29,27 @@ size_t *kmp_create_next_array(char* string) {
         }
         else {
             if (!i) { next_array[j] = 0; j++; }
+            else { i = next_array[i - 1]; }
+        }
+    }
+    return next_array;
+}
+
+/* KMP algorithm preprocessor: create NEXT array. */
+size_t *kmp_create_next_array_new(char* ptr, size_t len) {
+    size_t i = 0, j = 1;
+    if (ptr == NULL || len < 1) 
+        return NULL;
+    size_t *next_array = (size_t *)calloc(len, sizeof(size_t));
+    if (next_array == NULL) 
+        return NULL;
+    while (j < len) {
+        if (ptr[j] == ptr[i]) {
+            next_array[j] = next_array[j - 1] + 1;
+            ++i; ++j;
+        }
+        else {
+            if (!i) { next_array[j] = 0; ++j; }
             else { i = next_array[i - 1]; }
         }
     }
@@ -47,7 +68,7 @@ int64_t kmp_search_std(char line[], char search_substr[]) {
         return -1;
     while (i < line_len) {
         if (line[i] == search_substr[j]) {
-            i++; j++;
+            ++i; ++j;
             if (j == key_len) {
                 free(next_array);
                 return i - j;
@@ -55,7 +76,7 @@ int64_t kmp_search_std(char line[], char search_substr[]) {
         }
         else {
             if (j) { j = next_array[j - 1]; }
-            else   { i++; }
+            else   { ++i; }
         }
     }
     free(next_array); // NEXT array freed.
@@ -74,13 +95,13 @@ int64_t kmp_search_fast(char line[], char search_substr[], size_t next_array[]) 
         return -1;
     while (i < line_len) {
         if (line[i] == search_substr[j]) {
-            i++; j++;
+            ++i; ++j;
             if (j == key_len)
                 return i - j;
         }
         else {
             if (j) { j = next_array[j - 1]; }
-            else   { i++; }
+            else   { ++i; }
         }
     }
     return -1;
@@ -99,19 +120,19 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
         return -1;
     while (i < line_len) {
         if (line[i] == search_substr[j]) {
-            i++; j++;
+            ++i; ++j;
             if (j == substr_len)
                 return i - j;
         }
         else {
             if (j) { j = next_array[j - 1]; }
-            else   { i++; }
+            else   { ++i; }
         }
     }
     return -1;
 }
 
-#define TEST_ROUNDS         50
+#define TEST_ROUNDS         100
 #define MATCHED_LIST_MAX    65536
 
 #define ERR_FILE_OPEN       -1
@@ -140,12 +161,12 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
         ret_flag = ERR_NULL_PTR;
         goto clean_and_return;
     }
-    size_t *next_array = kmp_create_next_array(search_kwd);
+    size_t matched_line_num = 0, kwd_len = strlen(search_kwd);
+    size_t *next_array = kmp_create_next_array_new(search_kwd, kwd_len);
     if(next_array == NULL) {
         ret_flag = ERR_MEM_ALLOC;
         goto clean_and_return;
     }
-    size_t matched_line_num = 0, kwd_len = strlen(search_kwd);
  #ifndef _WIN32
     struct stat file_stat;
     if(fstat(fd, &file_stat) == -1) {
@@ -186,7 +207,7 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
 #endif
     char *p_tmp = map_head;
     size_t idx_tmp = 0, line_len;
-    for(size_t pos = 0; pos < file_size; pos++) {
+    for(size_t pos = 0; pos < file_size; ++pos) {
         if(map_head[pos] == '\n') {
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
             line_len = pos - idx_tmp;
@@ -199,7 +220,7 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
                 memcpy(line_tmp, p_tmp, line_len); 
                 line_tmp[line_len] = '\0';
                 matched_list[matched_line_num] = line_tmp;
-                matched_line_num++;
+                ++matched_line_num;
                 if(matched_line_num == matched_list_max) {
                     ret_flag = ERR_LIST_BOUND;
                     break;
@@ -237,7 +258,7 @@ int main(int argc, char **argv) {
         ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", matched_lines, MATCHED_LIST_MAX);
     }
     clock_t end = clock();
-    for(size_t i = 0; i < ret; i++) {
+    for(size_t i = ret - 3; i < ret; i++) {
         printf("%s\n", matched_lines[i]);
         free(matched_lines[i]);
     }
