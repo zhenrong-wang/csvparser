@@ -40,7 +40,7 @@ size_t *kmp_create_next_array_new(char* ptr, size_t len) {
     size_t i = 0, j = 1;
     if (ptr == NULL || len < 1) 
         return NULL;
-    size_t *next_array = (size_t *)malloc(len * sizeof(size_t));
+    size_t *next_array = (size_t *)calloc(len, sizeof(size_t));
     if (next_array == NULL) 
         return NULL;
     while (j < len) {
@@ -132,7 +132,7 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
     return -1;
 }
 
-#define TEST_ROUNDS         1000
+#define TEST_ROUNDS         300
 
 #define ERR_FILE_OPEN       -1
 #define ERR_NULL_PTR        -3
@@ -321,6 +321,7 @@ int main(int argc, char **argv) {
             tmp_next = tmp->next;
             free(tmp);
             tmp = tmp_next;
+
         }
         printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
     }
