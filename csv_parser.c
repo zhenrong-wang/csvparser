@@ -40,7 +40,7 @@ size_t *kmp_create_next_array_new(char* ptr, size_t len) {
     size_t i = 0, j = 1;
     if (ptr == NULL || len < 1) 
         return NULL;
-    size_t *next_array = (size_t *)calloc(len, sizeof(size_t));
+    size_t *next_array = (size_t *)malloc(len * sizeof(size_t));
     if (next_array == NULL) 
         return NULL;
     while (j < len) {
@@ -132,23 +132,84 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
     return -1;
 }
 
-#define TEST_ROUNDS         100
-#define MATCHED_LIST_MAX    65536
+#define TEST_ROUNDS         1000
 
 #define ERR_FILE_OPEN       -1
 #define ERR_NULL_PTR        -3
 #define ERR_MEM_ALLOC       -5
 #define ERR_FILE_STAT       -7
 #define ERR_MAP_FAILED      -9
-#define ERR_ALLOC_IN_LOOP   -11
-#define ERR_LIST_BOUND      -13
-#define ERR_UNMAP_FAILED    -15
+#define ERR_LIST_INSERT     -11
+#define ERR_UNMAP_FAILED    -13
+
+struct slist {
+    char *matched_line;
+    struct slist *next;
+};
+
+/* This Macro seems not helpful to the performance. */
+#define INSERT_NODE_MACRO(pp_head, str) ({ \
+        int err_flag = 0; \
+        if (pp_head == NULL || str == NULL) { \
+            err_flag = -1; \
+        } else { \
+            struct slist *new_node = (struct slist *)malloc(sizeof(struct slist)); \
+            if (new_node == NULL) { \
+                err_flag = 1; \
+            } else { \
+                new_node->matched_line = str; \
+                struct slist *tmp = *pp_head; \
+                *pp_head = new_node; \
+                (tmp == NULL) ? ({new_node->next = NULL;}) : ({new_node->next = tmp;}); \
+            } \
+            err_flag = 0; \
+        } \
+        err_flag; \
+        })   
+
+/* This function is good to go, but I replaced it with the "insert_matched_line" below. */
+int insert_node(struct slist **head, char *str) {
+    if(head == NULL || str == NULL) 
+        return -1;
+    struct slist *new_node = (struct slist *)malloc(sizeof(struct slist));
+    if(new_node == NULL)
+        return 1;
+    new_node->matched_line = str;
+    struct slist *tmp = *head;
+    *head = new_node;
+    if(tmp == NULL) 
+        new_node->next = NULL;
+    else
+        new_node->next = tmp;
+    return 0;
+}
+
+int insert_matched_line(struct slist **head, char *src_ptr, size_t line_len) {
+    if(head == NULL || src_ptr == NULL) 
+        return -1;
+    struct slist *new_node = (struct slist *)malloc(sizeof(struct slist));
+    if(new_node == NULL)
+        return 1;
+    new_node->matched_line = (char *)malloc((line_len + 1) * sizeof(char));
+    if(new_node->matched_line == NULL) {
+        free(new_node);
+        return 3;
+    }
+    memcpy(new_node->matched_line, src_ptr, line_len);
+    new_node->matched_line[line_len] = '\0';
+    struct slist *tmp = *head;
+    *head = new_node;
+    if(tmp == NULL) 
+        new_node->next = NULL;
+    else
+        new_node->next = tmp;
+    return 0;
+}
 
 /**
- * Parse the CSV file and find the lines with the "search_kwd".
- * The matched_list should be dynamic, but for demo purpose we didn't do that 
+ * Parse the CSV file and find the lines with the "search_kwd". 
  */
-int csv_parser(const char *data_file, char *search_kwd, char **matched_list, const size_t matched_list_max) {
+int csv_parser(const char *data_file, char *search_kwd, struct slist **matched_list, size_t *matched_line_num) {
     int ret_flag = 0;
 #ifndef _WIN32
     int fd = open(data_file, O_RDONLY);
@@ -157,11 +218,11 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
         goto clean_and_return;
     }
 #endif
-    if(search_kwd == NULL || matched_list == NULL) {
+    if(search_kwd == NULL || matched_list == NULL || matched_line_num == NULL) {
         ret_flag = ERR_NULL_PTR;
         goto clean_and_return;
     }
-    size_t matched_line_num = 0, kwd_len = strlen(search_kwd);
+    size_t kwd_len = strlen(search_kwd);
     size_t *next_array = kmp_create_next_array_new(search_kwd, kwd_len);
     if(next_array == NULL) {
         ret_flag = ERR_MEM_ALLOC;
@@ -191,7 +252,6 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
         goto clean_and_return;
     }
     size_t file_size = file_size_x.QuadPart;
-    //printf("%lu\n", file_size);
     HANDLE h_file_mapping = CreateFileMapping(h_file, NULL, PAGE_READONLY, 0, 0, NULL);
     if(h_file_mapping == INVALID_HANDLE_VALUE) {
         ret_flag = ERR_MAP_FAILED;
@@ -202,29 +262,20 @@ int csv_parser(const char *data_file, char *search_kwd, char **matched_list, con
         ret_flag = ERR_MAP_FAILED;
         goto clean_and_return;
     }
-    //printf("%lu\n", file_size);
     char *map_head = (char *)lp_base;
 #endif
     char *p_tmp = map_head;
-    size_t idx_tmp = 0, line_len;
+    size_t idx_tmp = 0, line_len = 0, matched_counter = 0;
     for(size_t pos = 0; pos < file_size; ++pos) {
         if(map_head[pos] == '\n') {
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
             line_len = pos - idx_tmp;
             if(kmp_search_ultra(p_tmp, line_len, search_kwd, kwd_len, next_array) >= 0) {
-                char *line_tmp = (char *)malloc((line_len + 1) * sizeof(char));
-                if(line_tmp == NULL) {
-                    ret_flag = ERR_ALLOC_IN_LOOP;
+                if(insert_matched_line(matched_list, p_tmp, line_len) != 0) {
+                    ret_flag = ERR_LIST_INSERT;
                     break;
                 }
-                memcpy(line_tmp, p_tmp, line_len); 
-                line_tmp[line_len] = '\0';
-                matched_list[matched_line_num] = line_tmp;
-                ++matched_line_num;
-                if(matched_line_num == matched_list_max) {
-                    ret_flag = ERR_LIST_BOUND;
-                    break;
-                }
+                ++matched_counter;
             }
             p_tmp += (line_len + 1);
             idx_tmp = pos + 1;
@@ -247,22 +298,32 @@ clean_and_return:
 #endif
     if(ret_flag != ERR_FILE_OPEN && ret_flag != ERR_NULL_PTR && ret_flag != ERR_MEM_ALLOC)
         free(next_array);
-    return (ret_flag) ? ret_flag : matched_line_num;
+    (ret_flag) ? (*matched_line_num = 0) : (*matched_line_num = matched_counter);
+    return ret_flag;
 }
 
 int main(int argc, char **argv) {
-    char *matched_lines[MATCHED_LIST_MAX] = {NULL,};
-    clock_t start = clock();
+    size_t matched_line_num;
+    clock_t start, end;
+    long total_elapsed = 0;
     int ret;
     for(size_t i = 0; i < TEST_ROUNDS; i++) {
-        ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", matched_lines, MATCHED_LIST_MAX);
+        struct slist *matched_list = NULL;
+        start = clock();
+        ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_list, &matched_line_num);
+        end = clock();
+        total_elapsed += (end - start);
+        
+        struct slist *tmp = matched_list, *tmp_next;
+        for(size_t j = 0; j < matched_line_num; j++) {
+            if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
+                printf("%s\n", tmp->matched_line);
+            tmp_next = tmp->next;
+            free(tmp);
+            tmp = tmp_next;
+        }
+        printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
     }
-    clock_t end = clock();
-    for(size_t i = ret - 3; i < ret; i++) {
-        printf("%s\n", matched_lines[i]);
-        free(matched_lines[i]);
-    }
-    printf("\nmatched lines:\t%d ---------\n", ret);
-    printf("time_elapsed:\t%lf ms\n", (double)(end - start) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
+    printf("\ntime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
     return 0;
 }
