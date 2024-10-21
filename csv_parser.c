@@ -142,8 +142,8 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
 #define ERR_MAP_FAILED      -9
 #define ERR_LIST_INSERT     -11
 #define ERR_UNMAP_FAILED    -13
-#define ERR_LIST_GROW       -15
-#define ERR_LIST_COPY       -17
+#define ERR_ARR_GROW        -15
+#define ERR_ARR_COPY        -17
 
 struct matched_array {
     char *src_addr;
@@ -388,7 +388,7 @@ int csv_parser_arr(const char *data_file, char *search_kwd, struct matched_array
                                                  block_counter * LIST_SIZE_STEP * \
                                                  sizeof(struct matched_array));
                     if(tmp == NULL) {
-                        ret_flag = ERR_LIST_GROW;
+                        ret_flag = ERR_ARR_GROW;
                         free(*matched_array); /* No allocation inside the array. */
                         goto memory_unmap;
                     }
@@ -404,7 +404,7 @@ int csv_parser_arr(const char *data_file, char *search_kwd, struct matched_array
     }
     for(size_t i = 0; i < matched_counter; ++i) {
         if(((*matched_array)[i].matched_line = (char *)malloc(((*matched_array)[i].line_len + 1) * sizeof(char))) == NULL) {
-            ret_flag = ERR_LIST_COPY; /* If this err occured, *matched_array will be returned. */
+            ret_flag = ERR_ARR_COPY; /* If this err occured, *matched_array will be returned. */
             for(size_t j = 0; j < i; ++j)
                 free((*matched_array)[j].matched_line);
             break;
