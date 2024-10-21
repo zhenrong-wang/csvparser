@@ -157,7 +157,7 @@ struct slist {
 };
 
 /* This Macro seems not helpful to the performance. */
-#define INSERT_NODE_MACRO(pp_head, str) ({ \
+#define SLIST_INSERT_NODE_MACRO(pp_head, str) ({ \
         int err_flag = 0; \
         if (pp_head == NULL || str == NULL) { \
             err_flag = -1; \
@@ -177,7 +177,7 @@ struct slist {
         })   
 
 /* This function is good to go, but I replaced it with the "insert_matched_line" below. */
-int insert_node(struct slist **head, char *str) {
+int slist_insert_node(struct slist **head, char *str) {
     if(head == NULL || str == NULL) 
         return -1;
     struct slist *new_node = (struct slist *)malloc(sizeof(struct slist));
