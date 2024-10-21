@@ -90,10 +90,10 @@ struct slist {
         })
 
 size_t *kmp_create_next_array(char* string);
-inline size_t *kmp_create_next_array_new(char* ptr, size_t len);
+size_t *kmp_create_next_array_new(char* ptr, size_t len);
 int64_t kmp_search_std(char line[], char search_substr[]);
 int64_t kmp_search_fast(char line[], char search_substr[], size_t next_array[]);
-inline int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], size_t substr_len, size_t next_array[]);
+int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], size_t substr_len, size_t next_array[]);
 int slist_insert_node(struct slist **head, char *str);
 int insert_matched_line(struct slist **head, char *src_ptr, size_t line_len);
 int csv_parser(const char *data_file, char *search_kwd, struct slist **matched_list, size_t *matched_line_num);
