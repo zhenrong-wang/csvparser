@@ -132,7 +132,7 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
     return -1;
 }
 
-#define TEST_ROUNDS         300
+#define TEST_ROUNDS         30
 #define LIST_SIZE_STEP      4096
 
 #define ERR_FILE_OPEN       -1
@@ -405,9 +405,8 @@ int csv_parser_arr(const char *data_file, char *search_kwd, struct matched_array
     for(size_t i = 0; i < matched_counter; ++i) {
         if(((*matched_array)[i].matched_line = (char *)malloc(((*matched_array)[i].line_len + 1) * sizeof(char))) == NULL) {
             ret_flag = ERR_LIST_COPY; /* If this err occured, *matched_array will be returned. */
-            for(size_t j = 0; j < i; ++j) {
+            for(size_t j = 0; j < i; ++j)
                 free((*matched_array)[j].matched_line);
-            }
             break;
         }
         memcpy((*matched_array)[i].matched_line, (*matched_array)[i].src_addr, (*matched_array)[i].line_len);
@@ -441,40 +440,45 @@ int main(int argc, char **argv) {
     clock_t start, end;
     long total_elapsed = 0;
     int ret;
-    for(size_t i = 0; i < TEST_ROUNDS; i++) {
-        struct matched_array *matched_array = NULL;
-        start = clock();
-        ret = csv_parser_arr("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_array, &matched_line_num);
-        end = clock();
-        total_elapsed += (end - start);
-        for(size_t j = 0; j < matched_line_num; j++) {
-            if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
-                printf("%s\n", matched_array[j].matched_line);
-            free(matched_array[j].matched_line);
-        }
-        free(matched_array);
-        printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
+    if(argc == 1) {
+        printf("Please specify \"arr\" or \"list\" or \"all\"\n");
+        return 1;
     }
-
-    /*
-    for(size_t i = 0; i < TEST_ROUNDS; i++) {
-        struct slist *matched_list = NULL;
-        start = clock();
-        ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_list, &matched_line_num);
-        end = clock();
-        total_elapsed += (end - start);
-        struct slist *tmp = matched_list, *tmp_next;
-        for(size_t j = 0; j < matched_line_num; j++) {
-            if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
-                printf("%s\n", tmp->matched_line);
-            tmp_next = tmp->next;
-            free(tmp);
-            tmp = tmp_next;
-
+    if(strcmp(argv[1], "arr") == 0 || strcmp(argv[1], "all") == 0) {
+        for(size_t i = 0; i < TEST_ROUNDS; i++) {
+            struct matched_array *matched_array = NULL;
+            start = clock();
+            ret = csv_parser_arr("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_array, &matched_line_num);
+            end = clock();
+            total_elapsed += (end - start);
+            for(size_t j = 0; j < matched_line_num; j++) {
+                if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
+                    printf("%s\n", matched_array[j].matched_line);
+                free(matched_array[j].matched_line);
+            }
+            free(matched_array);
+            printf("arr:\tround:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
         }
-        printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
-    }*/
-    
-    printf("\ntime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
+        printf("\narr\ttime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
+    }
+    if(strcmp(argv[1], "list") == 0 || strcmp(argv[1], "all") == 0) {
+        for(size_t i = 0; i < TEST_ROUNDS; i++) {
+            struct slist *matched_list = NULL;
+            start = clock();
+            ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_list, &matched_line_num);
+            end = clock();
+            total_elapsed += (end - start);
+            struct slist *tmp = matched_list, *tmp_next;
+            for(size_t j = 0; j < matched_line_num; j++) {
+                if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
+                    printf("%s\n", tmp->matched_line);
+                tmp_next = tmp->next;
+                free(tmp);
+                tmp = tmp_next;
+            }
+            printf("list:\tround:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
+        }
+        printf("\nlist\ttime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
+    }
     return 0;
 }
