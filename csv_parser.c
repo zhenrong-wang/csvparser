@@ -438,13 +438,13 @@ clean_and_return:
 int main(int argc, char **argv) {
     size_t matched_line_num;
     clock_t start, end;
-    long total_elapsed = 0;
     int ret;
     if(argc == 1) {
         printf("Please specify \"arr\" or \"list\" or \"all\"\n");
         return 1;
     }
     if(strcmp(argv[1], "arr") == 0 || strcmp(argv[1], "all") == 0) {
+        long total_elapsed = 0;
         for(size_t i = 0; i < TEST_ROUNDS; i++) {
             struct matched_array *matched_array = NULL;
             start = clock();
@@ -462,6 +462,7 @@ int main(int argc, char **argv) {
         printf("\narr\ttime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
     }
     if(strcmp(argv[1], "list") == 0 || strcmp(argv[1], "all") == 0) {
+        long total_elapsed = 0;
         for(size_t i = 0; i < TEST_ROUNDS; i++) {
             struct slist *matched_list = NULL;
             start = clock();
