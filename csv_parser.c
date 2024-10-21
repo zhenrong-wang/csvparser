@@ -133,6 +133,7 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
 }
 
 #define TEST_ROUNDS         300
+#define LIST_SIZE_STEP      4096
 
 #define ERR_FILE_OPEN       -1
 #define ERR_NULL_PTR        -3
@@ -141,6 +142,14 @@ int64_t kmp_search_ultra(char line[], size_t line_len, char search_substr[], siz
 #define ERR_MAP_FAILED      -9
 #define ERR_LIST_INSERT     -11
 #define ERR_UNMAP_FAILED    -13
+#define ERR_LIST_GROW       -15
+#define ERR_LIST_COPY       -17
+
+struct matched_array {
+    char *src_addr;
+    size_t line_len;
+    char *matched_line;
+};
 
 struct slist {
     char *matched_line;
@@ -298,9 +307,134 @@ clean_and_return:
 #endif
     if(ret_flag != ERR_FILE_OPEN && ret_flag != ERR_NULL_PTR && ret_flag != ERR_MEM_ALLOC)
         free(next_array);
-    (ret_flag) ? (*matched_line_num = 0) : (*matched_line_num = matched_counter);
+    (ret_flag && ret_flag != ERR_UNMAP_FAILED) ? (*matched_line_num = 0) : (*matched_line_num = matched_counter);
     return ret_flag;
 }
+
+/**
+ * Parse the CSV file and find the lines with the "search_kwd". 
+ */
+int csv_parser_arr(const char *data_file, char *search_kwd, struct matched_array **matched_array, size_t *matched_line_num) {
+    int ret_flag = 0;
+#ifndef _WIN32
+    int fd = open(data_file, O_RDONLY);
+    if(fd == -1) {
+        ret_flag = ERR_FILE_OPEN;
+        goto clean_and_return;
+    }
+#endif
+    if(search_kwd == NULL || matched_array == NULL || matched_line_num == NULL) {
+        ret_flag = ERR_NULL_PTR;
+        goto clean_and_return;
+    }
+    size_t kwd_len = strlen(search_kwd);
+    size_t *next_array = kmp_create_next_array_new(search_kwd, kwd_len);
+    if(next_array == NULL) {
+        ret_flag = ERR_MEM_ALLOC;
+        goto clean_and_return;
+    }
+    *matched_array = (struct matched_array *)malloc(sizeof(struct matched_array) * LIST_SIZE_STEP);
+    if(*matched_array == NULL) {
+        free(next_array);
+        ret_flag = ERR_MEM_ALLOC;
+        goto clean_and_return;
+    }
+ #ifndef _WIN32
+    struct stat file_stat;
+    if(fstat(fd, &file_stat) == -1) {
+        ret_flag = ERR_FILE_STAT;
+        goto clean_and_return;
+    }
+    size_t file_size = file_stat.st_size;
+    char *map_head = mmap(NULL, file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0); 
+    if(map_head == MAP_FAILED) {
+        ret_flag = ERR_MAP_FAILED;
+        goto clean_and_return;
+    }
+#else
+    HANDLE h_file = CreateFile(data_file, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if(h_file == INVALID_HANDLE_VALUE) {
+        ret_flag = ERR_FILE_OPEN;
+        goto clean_and_return;
+    }
+    LARGE_INTEGER file_size_x;
+    if(GetFileSizeEx(h_file, &file_size_x)==0) {
+        ret_flag = ERR_FILE_STAT;
+        goto clean_and_return;
+    }
+    size_t file_size = file_size_x.QuadPart;
+    HANDLE h_file_mapping = CreateFileMapping(h_file, NULL, PAGE_READONLY, 0, 0, NULL);
+    if(h_file_mapping == INVALID_HANDLE_VALUE) {
+        ret_flag = ERR_MAP_FAILED;
+        goto clean_and_return;
+    }
+    LPVOID lp_base = MapViewOfFile(h_file_mapping, FILE_MAP_READ | FILE_MAP_COPY, 0, 0, file_size);
+    if(lp_base == NULL) {
+        ret_flag = ERR_MAP_FAILED;
+        goto clean_and_return;
+    }
+    char *map_head = (char *)lp_base;
+#endif
+    char *p_tmp = map_head;
+    size_t idx_tmp = 0, line_len = 0, matched_counter = 0, block_counter = 1;
+    for(size_t pos = 0; pos < file_size; ++pos) {
+        if(map_head[pos] == '\n') {
+            //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
+            line_len = pos - idx_tmp;
+            if(kmp_search_ultra(p_tmp, line_len, search_kwd, kwd_len, next_array) >= 0) {
+                if(matched_counter >= (block_counter * LIST_SIZE_STEP)) {
+                    ++block_counter;
+                    struct matched_array *tmp = (struct matched_array *)realloc(*matched_array, \
+                                                 block_counter * LIST_SIZE_STEP * \
+                                                 sizeof(struct matched_array));
+                    if(tmp == NULL) {
+                        ret_flag = ERR_LIST_GROW;
+                        free(*matched_array); /* No allocation inside the array. */
+                        goto memory_unmap;
+                    }
+                    *matched_array = tmp;
+                }
+                (*matched_array)[matched_counter].src_addr = p_tmp;
+                (*matched_array)[matched_counter].line_len = line_len;
+                ++matched_counter;
+            }
+            p_tmp += (line_len + 1);
+            idx_tmp = pos + 1;
+        }
+    }
+    for(size_t i = 0; i < matched_counter; ++i) {
+        if(((*matched_array)[i].matched_line = (char *)malloc(((*matched_array)[i].line_len + 1) * sizeof(char))) == NULL) {
+            ret_flag = ERR_LIST_COPY; /* If this err occured, *matched_array will be returned. */
+            for(size_t j = 0; j < i; ++j) {
+                free((*matched_array)[j].matched_line);
+            }
+            break;
+        }
+        memcpy((*matched_array)[i].matched_line, (*matched_array)[i].src_addr, (*matched_array)[i].line_len);
+        (*matched_array)[i].matched_line[(*matched_array)[i].line_len] = '\0';
+    }
+memory_unmap:
+#ifdef _WIN32
+    if(!UnmapViewOfFile(lp_base) || !CloseHandle(h_file_mapping))
+        ret_flag = ERR_UNMAP_FAILED;
+#else
+    if(munmap(map_head, file_size) == -1) 
+        ret_flag = ERR_UNMAP_FAILED;
+#endif
+        
+clean_and_return:
+    if(ret_flag != ERR_FILE_OPEN)
+#ifdef _WIN32
+        CloseHandle(h_file);
+#else
+        close(fd);
+#endif
+    if(ret_flag != ERR_FILE_OPEN && ret_flag != ERR_NULL_PTR && ret_flag != ERR_MEM_ALLOC)
+        free(next_array);
+    (ret_flag && ret_flag != ERR_UNMAP_FAILED) ? (*matched_line_num = 0) : (*matched_line_num = matched_counter);
+    return ret_flag;
+}
+
 
 int main(int argc, char **argv) {
     size_t matched_line_num;
@@ -308,12 +442,27 @@ int main(int argc, char **argv) {
     long total_elapsed = 0;
     int ret;
     for(size_t i = 0; i < TEST_ROUNDS; i++) {
+        struct matched_array *matched_array = NULL;
+        start = clock();
+        ret = csv_parser_arr("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_array, &matched_line_num);
+        end = clock();
+        total_elapsed += (end - start);
+        for(size_t j = 0; j < matched_line_num; j++) {
+            if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
+                printf("%s\n", matched_array[j].matched_line);
+            free(matched_array[j].matched_line);
+        }
+        free(matched_array);
+        printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
+    }
+
+    /*
+    for(size_t i = 0; i < TEST_ROUNDS; i++) {
         struct slist *matched_list = NULL;
         start = clock();
         ret = csv_parser("./data/Table_1_Authors_career_2023_pubs_since_1788_wopp_extracted_202408_justnames.csv", ",Harvard", &matched_list, &matched_line_num);
         end = clock();
         total_elapsed += (end - start);
-        
         struct slist *tmp = matched_list, *tmp_next;
         for(size_t j = 0; j < matched_line_num; j++) {
             if(i == (TEST_ROUNDS - 1) && j >= (matched_line_num - 3)) 
@@ -324,7 +473,8 @@ int main(int argc, char **argv) {
 
         }
         printf("round:\t%lu\tmatched lines:\t%lu\ttime_elapsed:\t%lf ms\n", i + 1, matched_line_num, (double)(end - start) * 1000 / CLOCKS_PER_SEC);
-    }
+    }*/
+    
     printf("\ntime_elapsed_avg:\t%lf ms\n", (double)(total_elapsed) * 1000 / CLOCKS_PER_SEC / TEST_ROUNDS);
     return 0;
 }
