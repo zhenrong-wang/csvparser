@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define TEST_ROUNDS         30
+#define TEST_ROUNDS         100
 #define LIST_SIZE_STEP      4096
 
 #define ERR_FILE_OPEN       -1
