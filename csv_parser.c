@@ -274,11 +274,11 @@ int csv_parser(const char *data_file, char *search_kwd, struct slist **matched_l
     char *map_head = (char *)lp_base;
 #endif
     char *p_tmp = map_head;
-    size_t idx_tmp = 0, line_len = 0, matched_counter = 0;
+    size_t idx_tmp = 0, matched_counter = 0;
     for(size_t pos = 0; pos < file_size; ++pos) {
         if(map_head[pos] == '\n') {
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
-            line_len = pos - idx_tmp;
+            size_t line_len = pos - idx_tmp;
             if(kmp_search_ultra(p_tmp, line_len, search_kwd, kwd_len, next_array) >= 0) {
                 if(insert_matched_line(matched_list, p_tmp, line_len) != 0) {
                     ret_flag = ERR_LIST_INSERT;
@@ -376,11 +376,11 @@ int csv_parser_arr(const char *data_file, char *search_kwd, struct matched_array
     char *map_head = (char *)lp_base;
 #endif
     char *p_tmp = map_head;
-    size_t idx_tmp = 0, line_len = 0, matched_counter = 0, block_counter = 1;
+    size_t idx_tmp = 0, matched_counter = 0, block_counter = 1;
     for(size_t pos = 0; pos < file_size; ++pos) {
         if(map_head[pos] == '\n') {
             //map_head[pos] = '\0'; /* Now we use the kmp_search_ultra, no flip needed. */
-            line_len = pos - idx_tmp;
+            size_t line_len = pos - idx_tmp;
             if(kmp_search_ultra(p_tmp, line_len, search_kwd, kwd_len, next_array) >= 0) {
                 if(matched_counter >= (block_counter * LIST_SIZE_STEP)) {
                     ++block_counter;
